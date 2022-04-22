@@ -1,0 +1,30 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--argoverse",
+                "--future_frame_num", "30",
+                "--do_train",
+                "--data_dir", "sample/data/",
+                "--output_dir", "models.densetnt.1",
+                "--hidden_size", "128", 
+                "--train_batch_size", "2", 
+                "--use_map",  
+                "--core_num", "2",
+                "--use_centerline", 
+                "--distributed_training", "1",
+                "--other_params", "semantic_lane direction l1_loss goals_2D enhance_global_graph subdivide lazy_points new laneGCN point_sub_graph stage_one stage_one_dynamic=0.95 laneGCN-4 point_level-4-3 complete_traj complete_traj-3",
+            ]
+        }
+    ]
+}

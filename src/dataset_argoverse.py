@@ -57,7 +57,7 @@ def get_sub_map(args: utils.Args, x, y, city_name, vectors=[], polyline_spans=[]
             # lane_centerline = am.city_lane_centerlines_dict[city_name][lane_ids[0]].centerline
             # print(lane_centerline.shape, am.get_ground_height_at_xy(lane_centerline, city_name))
             local_lane_centerlines = [am.get_lane_segment_centerline(lane_id, city_name) for lane_id in lane_ids]
-            polygons = local_lane_centerlines
+            polygons = local_lane_centerlines   # polygons are the x, y of centerlines of the top_lanes within 50 meters radius
             # z = am.get_ground_height_at_xy(np.array([[x, y]]), city_name)[0]
 
             if args.visualize:
@@ -219,6 +219,7 @@ def preprocess_map(map_dict):
 def preprocess(args, id2info, mapping):
     """
     This function calculates matrix based on information from get_instance.
+    将id2info中的信息编码到mapping字典中.
     """
     polyline_spans = []
     keys = list(id2info.keys())
@@ -308,7 +309,7 @@ def preprocess(args, id2info, mapping):
         else:
             assert len(info) == 30
     for line in info:
-        labels.append(line[X])
+        labels.append(line[X])  # generate ground truth
         labels.append(line[Y])
 
     if 'set_predict' in args.other_params:
@@ -329,15 +330,15 @@ def preprocess(args, id2info, mapping):
                     min_dis = temp
                     stage_one_label = i
 
-            mapping['stage_one_label'] = stage_one_label
+            mapping['stage_one_label'] = stage_one_label    # top_lane index
 
     mapping.update(dict(
-        matrix=matrix,
-        labels=np.array(labels).reshape([30, 2]),
-        polyline_spans=[slice(each[0], each[1]) for each in polyline_spans],
+        matrix=matrix,  # stacked feature
+        labels=np.array(labels).reshape([30, 2]),   # ground truth
+        polyline_spans=[slice(each[0], each[1]) for each in polyline_spans],    # start row and end row for each instance
         labels_is_valid=np.ones(args.future_frame_num, dtype=np.int64),
         eval_time=30,
-    ))
+    ))  # dict_keys(['file_name', 'start_time', 'city_name', 'cent_x', 'cent_y', 'agent_pred_index', 'two_seconds', 'angle', 'trajs', 'agents', 'map_start_polyline_idx', 'polygons', 'goals_2D', 'goals_2D_labels', 'stage_one_label'])
 
     return mapping
 
@@ -349,8 +350,8 @@ def argoverse_get_instance(lines, file_name, args):
 
     global max_vector_num
     vector_num = 0
-    id2info = {}
-    mapping = {}
+    id2info = {}    # 类似于 groupby track-id
+    mapping = {}    # 当前scene的全局信息, e.g. normalized pos
     mapping['file_name'] = file_name
 
     for i, line in enumerate(lines):
@@ -375,6 +376,7 @@ def argoverse_get_instance(lines, file_name, args):
             id2info[line[TRACK_ID]] = [line]
 
         if line[OBJECT_TYPE] == 'AGENT' and len(id2info['AGENT']) == 20:
+            # 由于这里的id2info是不断append的, 这里用于记录tgt_agent在current的信息
             assert 'AV' in id2info
             assert 'cent_x' not in mapping
             agent_lines = id2info['AGENT']
@@ -455,7 +457,7 @@ class Dataset(torch.utils.data.Dataset):
                 pbar = tqdm(total=len(files))
 
                 queue = multiprocessing.Queue(args.core_num)
-                queue_res = multiprocessing.Queue()
+                queue_res = multiprocessing.Queue()     # TODO: queue和queue_res的区别是什么? queue和场景数量相关, queue_res和进程数相关
 
                 def calc_ex_list(queue, queue_res, args):
                     res = []
@@ -467,7 +469,7 @@ class Dataset(torch.utils.data.Dataset):
                         if file.endswith("csv"):
                             with open(file, "r", encoding='utf-8') as fin:
                                 lines = fin.readlines()[1:]
-                            instance = argoverse_get_instance(lines, file, args)
+                            instance = argoverse_get_instance(lines, file, args)    # instance is mapping dict
                             if instance is not None:
                                 data_compress = zlib.compress(pickle.dumps(instance))
                                 res.append(data_compress)
@@ -494,7 +496,7 @@ class Dataset(torch.utils.data.Dataset):
 
                 pbar = tqdm(total=len(files))
                 for i in range(len(files)):
-                    t = queue_res.get()
+                    t = queue_res.get()     # type(t) = <class 'bytes'>
                     if t is not None:
                         self.ex_list.append(t)
                     pbar.update(1)

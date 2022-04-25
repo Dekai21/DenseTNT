@@ -1120,14 +1120,14 @@ def get_subdivide_points(polygon, include_self=False, threshold=1.0, include_bes
         if i > 0:
             average_dis += get_dis(point, point_pre)
         point_pre = point
-    average_dis /= len(polygon) - 1
+    average_dis /= len(polygon) - 1     # average displacement between the centerline points
 
     points = []
     if return_unit_vectors:
         assert not include_self and not include_beside
         unit_vectors = []
     divide_num = 1
-    while average_dis / divide_num > threshold:
+    while average_dis / divide_num > threshold:     # make sure after interpolation, the interval is smaller than threshold
         divide_num += 1
     for i, point in enumerate(polygon):
         if i > 0:

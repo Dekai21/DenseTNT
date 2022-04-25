@@ -93,11 +93,11 @@ class Decoder(nn.Module):
     def goals_2D_per_example_stage_one(self, i, mapping, lane_states_batch, inputs, inputs_lengths,
                                        hidden_states, device, loss):
         def get_stage_one_scores():
-            stage_one_hidden = lane_states_batch[i]
+            stage_one_hidden = lane_states_batch[i]     # [41, 128]
             stage_one_hidden_attention = self.stage_one_cross_attention(
                 stage_one_hidden.unsqueeze(0), inputs[i][:inputs_lengths[i]].unsqueeze(0)).squeeze(0)
             stage_one_scores = self.stage_one_decoder(torch.cat([hidden_states[i, 0, :].unsqueeze(0).expand(
-                stage_one_hidden.shape), stage_one_hidden, stage_one_hidden_attention], dim=-1))
+                stage_one_hidden.shape), stage_one_hidden, stage_one_hidden_attention], dim=-1))    # [41, 1]
             stage_one_scores = stage_one_scores.squeeze(-1)
             stage_one_scores = F.log_softmax(stage_one_scores, dim=-1)
             return stage_one_scores
@@ -151,7 +151,7 @@ class Decoder(nn.Module):
         goals_2D = np.array(goals_2D_new.tolist())
         # print('len', len(goals_2D))
 
-        scores = self.get_scores(goals_2D_new, *get_scores_inputs)
+        scores = self.get_scores(goals_2D_new, *get_scores_inputs)  # len(scores) = len(goals_2D_new)
 
         index = torch.argmax(scores).item()
         point = np.array(goals_2D_new[index].tolist())
@@ -185,10 +185,10 @@ class Decoder(nn.Module):
                     torch.cat([hidden_states[i, 0, :].detach(), target_feature, hidden_attention], dim=-1)).view(
                     [self.future_frame_num, 2])
             loss[i] += (F.smooth_l1_loss(predict_traj, torch.tensor(gt_points, dtype=torch.float, device=device), reduction='none') * \
-                        torch.tensor(labels_is_valid[i], dtype=torch.float, device=device).view(self.future_frame_num, 1)).mean()
+                        torch.tensor(labels_is_valid[i], dtype=torch.float, device=device).view(self.future_frame_num, 1)).mean()   # regression loss
 
         loss[i] += F.nll_loss(scores.unsqueeze(0),
-                              torch.tensor([mapping[i]['goals_2D_labels']], device=device))
+                              torch.tensor([mapping[i]['goals_2D_labels']], device=device)) # class loss
 
     def goals_2D_per_example(self, i: int, goals_2D: np.ndarray, mapping: List[Dict], lane_states_batch: List[Tensor],
                              inputs: Tensor, inputs_lengths: List[int], hidden_states: Tensor, labels: List[np.ndarray],
@@ -359,7 +359,7 @@ class Decoder(nn.Module):
             return self.variety_loss(mapping, hidden_states, batch_size, inputs, inputs_lengths, labels_is_valid, loss, DE, device, labels)
         elif 'goals_2D' in args.other_params:
             for i in range(batch_size):
-                goals_2D = mapping[i]['goals_2D']
+                goals_2D = mapping[i]['goals_2D']   # [a lot, 2]
 
                 self.goals_2D_per_example(i, goals_2D, mapping, lane_states_batch, inputs, inputs_lengths,
                                           hidden_states, labels, labels_is_valid, device, loss, DE)
@@ -395,13 +395,13 @@ class Decoder(nn.Module):
         :param goals_2D_tensor: candidate goals sampled from map (shape ['goal num', 2])
         :return: log scores of goals (shape ['goal num'])
         """
-        if 'point_sub_graph' in args.other_params:
+        if 'point_sub_graph' in args.other_params:  # goals_2D_tensor.shape = [1149, 2], goals_2D_hidden.shape = [1149, 128]
             goals_2D_hidden = self.goals_2D_point_sub_graph(goals_2D_tensor.unsqueeze(0), hidden_states[i, 0:1, :]).squeeze(0)
         else:
             goals_2D_hidden = self.goals_2D_mlps(goals_2D_tensor)
 
         goals_2D_hidden_attention = self.goals_2D_cross_attention(
-            goals_2D_hidden.unsqueeze(0), inputs[i][:inputs_lengths[i]].unsqueeze(0)).squeeze(0)
+            goals_2D_hidden.unsqueeze(0), inputs[i][:inputs_lengths[i]].unsqueeze(0)).squeeze(0)    # goals_2D_hidden_attention.shape = goals_2D_hidden
 
         if 'stage_one' in args.other_params:
             stage_one_topk = mapping[i]['stage_one_topk']
@@ -409,10 +409,10 @@ class Decoder(nn.Module):
             stage_one_topk_here = stage_one_topk
             stage_one_goals_2D_hidden_attention = self.goals_2D_cross_attention(
                 goals_2D_hidden.unsqueeze(0), stage_one_topk_here.unsqueeze(0)).squeeze(0)
-            li = [hidden_states[i, 0, :].unsqueeze(0).expand(goals_2D_hidden.shape),
+            li = [hidden_states[i, 0, :].unsqueeze(0).expand(goals_2D_hidden.shape),    # 四个都是[1149, 128], tgt_agent的hidden的复制, goal的hidden, goal的hidden的atten, goal和top k top lane的hidden的cross-atten
                   goals_2D_hidden, goals_2D_hidden_attention, stage_one_goals_2D_hidden_attention]
 
-            scores = self.stage_one_goals_2D_decoder(torch.cat(li, dim=-1))
+            scores = self.stage_one_goals_2D_decoder(torch.cat(li, dim=-1))     # scores.shape = [1149, 1]
         else:
             scores = self.goals_2D_decoder(torch.cat([hidden_states[i, 0, :].unsqueeze(0).expand(
                 goals_2D_hidden.shape), goals_2D_hidden, goals_2D_hidden_attention], dim=-1))

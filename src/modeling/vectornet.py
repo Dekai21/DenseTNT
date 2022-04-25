@@ -27,13 +27,13 @@ class NewSubGraph(nn.Module):
             self.layer_0_again = MLP(hidden_size)
 
     def forward(self, input_list: list):
-        batch_size = len(input_list)
+        batch_size = len(input_list)    # len(input_list) = 41, len(input_list[0]) = 9, input_list[0].shape = [9, 128]
         device = input_list[0].device
         hidden_states, lengths = utils.merge_tensors(input_list, device)
         hidden_size = hidden_states.shape[2]
         max_vector_num = hidden_states.shape[1]
 
-        attention_mask = torch.zeros([batch_size, max_vector_num, max_vector_num], device=device)
+        attention_mask = torch.zeros([batch_size, max_vector_num, max_vector_num], device=device)   # shape = [41, 9, 9]
         hidden_states = self.layer_0(hidden_states)
 
         if 'point_level-4-3' in args.other_params:
@@ -52,7 +52,7 @@ class NewSubGraph(nn.Module):
             hidden_states = hidden_states + temp
             hidden_states = self.layers_2[layer_index](hidden_states)
 
-        return torch.max(hidden_states, dim=1)[0], torch.cat(utils.de_merge_tensors(hidden_states, lengths))
+        return torch.max(hidden_states, dim=1)[0], torch.cat(utils.de_merge_tensors(hidden_states, lengths))    # [41, 128], [369, 128]
 
 
 class VectorNet(nn.Module):
@@ -109,20 +109,20 @@ class VectorNet(nn.Module):
                 if j >= map_start_polyline_idx:
                     map_input_list.append(tensor)
 
-            input_list_list.append(input_list)
-            map_input_list_list.append(map_input_list)
+            input_list_list.append(input_list)  # len(input_list_list) = 2, len(input_list) = 37 (num_agent?), input_list[0].shape = [19, 128]
+            map_input_list_list.append(map_input_list)  # len(map_input_list) = 33 (num_top_lane?), map_input_list[0].shape = [9, 128]
 
         if True:
             element_states_batch = []
             for i in range(batch_size):
                 a, b = self.point_level_sub_graph(input_list_list[i])
-                element_states_batch.append(a)
+                element_states_batch.append(a)  # [77, 128], [37, 128]
 
         if 'stage_one' in args.other_params:
             lane_states_batch = []
             for i in range(batch_size):
-                a, b = self.point_level_sub_graph(map_input_list_list[i])
-                lane_states_batch.append(a)
+                a, b = self.point_level_sub_graph(map_input_list_list[i])   # a.shape = [33, 128]
+                lane_states_batch.append(a) # [47, 128], [33, 128]
 
         if 'laneGCN' in args.other_params:
             inputs_before_laneGCN, inputs_lengths_before_laneGCN = utils.merge_tensors(element_states_batch, device=device)
@@ -131,7 +131,7 @@ class VectorNet(nn.Module):
                 agents = element_states_batch[i][:map_start_polyline_idx]
                 lanes = element_states_batch[i][map_start_polyline_idx:]
                 if 'laneGCN-4' in args.other_params:
-                    lanes = lanes + self.laneGCN_A2L(lanes.unsqueeze(0), torch.cat([lanes, agents[0:1]]).unsqueeze(0)).squeeze(0)
+                    lanes = lanes + self.laneGCN_A2L(lanes.unsqueeze(0), torch.cat([lanes, agents[0:1]]).unsqueeze(0)).squeeze(0)   # cross-atten, 仅仅lanes被修改
                 else:
                     lanes = lanes + self.laneGCN_A2L(lanes.unsqueeze(0), agents.unsqueeze(0)).squeeze(0)
                     lanes = lanes + self.laneGCN_L2L(lanes.unsqueeze(0)).squeeze(0)
@@ -158,15 +158,15 @@ class VectorNet(nn.Module):
         if args.argoverse:
             utils.batch_init(mapping)
 
-        element_states_batch, lane_states_batch = self.forward_encode_sub_graph(mapping, matrix, polyline_spans, device, batch_size)
+        element_states_batch, lane_states_batch = self.forward_encode_sub_graph(mapping, matrix, polyline_spans, device, batch_size)    # ele_batch[0] = [ele, 128]
 
-        inputs, inputs_lengths = utils.merge_tensors(element_states_batch, device=device)
+        inputs, inputs_lengths = utils.merge_tensors(element_states_batch, device=device)   # inputs.shape = [batch, max_ele, 128]
         max_poly_num = max(inputs_lengths)
         attention_mask = torch.zeros([batch_size, max_poly_num, max_poly_num], device=device)
         for i, length in enumerate(inputs_lengths):
             attention_mask[i][:length][:length].fill_(1)
 
-        hidden_states = self.global_graph(inputs, attention_mask, mapping)
+        hidden_states = self.global_graph(inputs, attention_mask, mapping)  # hidden_states.shape == inputs.shape
 
         utils.logging('time3', round(time.time() - starttime, 2), 'secs')
 

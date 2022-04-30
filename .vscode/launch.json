@@ -12,11 +12,12 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                // train the model
                 "--argoverse",
                 "--future_frame_num", "30",
                 "--do_train",
                 "--data_dir", "sample/data/",
-                "--output_dir", "models.densetnt.1",
+                "--output_dir", "models.densetnt.2",
                 "--hidden_size", "128", 
                 "--train_batch_size", "2", 
                 "--use_map",  
@@ -26,6 +27,28 @@
                 "--other_params", "semantic_lane", "direction", "l1_loss", "goals_2D", "enhance_global_graph", "subdivide", "lazy_points", "new",
                                   "laneGCN", "point_sub_graph", "stage_one", "stage_one_dynamic=0.95", "laneGCN-4", "point_level-4-3", "complete_traj", 
                                   "complete_traj-3", 
+
+                // val
+                // "--do_eval", 
+                // "--eval_params", "optimization", "MRminFDE", "cnt_sample=9", "opti_time=0.1",
+                // "--data_dir_for_val", "sample/data/",
+                
+                // train set predictor
+                // "--argoverse", 
+                // "--future_frame_num", "30",
+                // "--do_train", 
+                // "--data_dir", "sample/data/", 
+                // "--output_dir", "models.densetnt.set_predict.1",
+                // "--hidden_size", "128", 
+                // "--train_batch_size", "2", 
+                // "--use_map",
+                // "--core_num", "2", 
+                // "--use_centerline", 
+                // "--distributed_training", "1",
+                // "--other_params", "semantic_lane", "direction", "l1_loss", "goals_2D", "enhance_global_graph", "subdivide", "lazy_points", "new", 
+                //                 "laneGCN", "point_sub_graph", "stage_one", "stage_one_dynamic=0.95", "laneGCN-4", "point_level-4-3", "complete_traj", 
+                //                 "set_predict=6", "set_predict-6", "data_ratio_per_epoch=0.4", "set_predict-topk=0", "set_predict-one_encoder", 
+                //                 "set_predict-MRratio=1.0", "set_predict-train_recover=models.densetnt.1/model_save/model.16.bin"
             ]
         }
     ]

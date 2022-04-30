@@ -178,7 +178,7 @@ def train_one_epoch(model, iter_bar, optimizer, device, args: utils.Args, i_epoc
 
     if not args.debug and is_main_device(device):
         model_to_save = model.module if hasattr(
-            model, 'module') else model  # Only save the model it-self
+            model, 'module') else model  # Only save the model it-self, hasattr(model, 'module') = True
         output_model_file = os.path.join(
             args.model_save_dir, "model.{0}.bin".format(i_epoch + 1))
         torch.save(model_to_save.state_dict(), output_model_file)
@@ -241,7 +241,7 @@ def demo_basic(rank, world_size, kwargs, queue):
 
     if args.distributed_training:
         dist.barrier()
-    args.reuse_temp_file = True
+    args.reuse_temp_file = True     # 之前已经预处理过数据, 这里可以直接reuse
 
     if args.argoverse:
         if args.argoverse:
@@ -249,7 +249,7 @@ def demo_basic(rank, world_size, kwargs, queue):
         train_dataset = Dataset(args, args.train_batch_size, to_screen=False)
 
         train_sampler = DistributedSampler(train_dataset, shuffle=args.do_train)
-        assert args.train_batch_size == 64, 'The optimal total batch size for training is 64'
+        # assert args.train_batch_size == 64, 'The optimal total batch size for training is 64'
         assert args.train_batch_size % world_size == 0
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset, sampler=train_sampler,

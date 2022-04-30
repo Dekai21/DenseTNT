@@ -11,7 +11,7 @@ import utils
 
 
 class NewSubGraph(nn.Module):
-
+ # 两层MLP + 3层res(hidden + global attention hidden), 最后返回eles的128维特征的subgraph特征和所有特征[-1, 128] (一个element可能包含多行)
     def __init__(self, hidden_size, depth=None):
         super(NewSubGraph, self).__init__()
         if depth is None:
@@ -26,19 +26,19 @@ class NewSubGraph(nn.Module):
         if 'point_level-4-3' in args.other_params:
             self.layer_0_again = MLP(hidden_size)
 
-    def forward(self, input_list: list):
-        batch_size = len(input_list)    # len(input_list) = 41, len(input_list[0]) = 9, input_list[0].shape = [9, 128]
+    def forward(self, input_list: list):    # 两层MLP + 3层res(hidden + global attention hidden)
+        num_ele = len(input_list)    # len(input_list) = 41, len(input_list[0]) = 9, input_list[0].shape = [9, 128]
         device = input_list[0].device
-        hidden_states, lengths = utils.merge_tensors(input_list, device)
+        hidden_states, lengths = utils.merge_tensors(input_list, device)    # hidden_states.shape = [ele, row_per_ele, hidden_size]
         hidden_size = hidden_states.shape[2]
         max_vector_num = hidden_states.shape[1]
 
-        attention_mask = torch.zeros([batch_size, max_vector_num, max_vector_num], device=device)   # shape = [41, 9, 9]
+        attention_mask = torch.zeros([num_ele, max_vector_num, max_vector_num], device=device)   # shape = [41, 9, 9]
         hidden_states = self.layer_0(hidden_states)
 
         if 'point_level-4-3' in args.other_params:
             hidden_states = self.layer_0_again(hidden_states)
-        for i in range(batch_size):
+        for i in range(num_ele):
             assert lengths[i] > 0
             attention_mask[i, :lengths[i], :lengths[i]].fill_(1)
 
@@ -52,7 +52,7 @@ class NewSubGraph(nn.Module):
             hidden_states = hidden_states + temp
             hidden_states = self.layers_2[layer_index](hidden_states)
 
-        return torch.max(hidden_states, dim=1)[0], torch.cat(utils.de_merge_tensors(hidden_states, lengths))    # [41, 128], [369, 128]
+        return torch.max(hidden_states, dim=1)[0], torch.cat(utils.de_merge_tensors(hidden_states, lengths))    # [41, 128], [369, 128], 这里的[0]是获取max函数的values
 
 
 class VectorNet(nn.Module):
@@ -73,9 +73,9 @@ class VectorNet(nn.Module):
         self.point_level_sub_graph = NewSubGraph(hidden_size)
         self.point_level_cross_attention = CrossAttention(hidden_size)
 
-        self.global_graph = GlobalGraph(hidden_size)
+        self.global_graph = GlobalGraph(hidden_size)    # self-atten
         if 'enhance_global_graph' in args.other_params:
-            self.global_graph = GlobalGraphRes(hidden_size)
+            self.global_graph = GlobalGraphRes(hidden_size)     # 两个缩小到原来1/2维度的self-attention进行合并
         if 'laneGCN' in args.other_params:
             self.laneGCN_A2L = CrossAttention(hidden_size)
             self.laneGCN_L2L = GlobalGraphRes(hidden_size)
@@ -89,7 +89,7 @@ class VectorNet(nn.Module):
 
     def forward_encode_sub_graph(self, mapping: List[Dict], matrix: List[np.ndarray], polyline_spans: List[List[slice]],
                                  device, batch_size) -> Tuple[List[Tensor], List[Tensor]]:
-        """
+        """ 两层MLP + 3层res(hidden + global attention hidden), 最后对lanes做laneGCN操作
         :param matrix: each value in list is vectors of all element (shape [-1, 128])
         :param polyline_spans: vectors of i_th element is matrix[polyline_spans[i]]
         :return: hidden states of all elements and hidden states of lanes
@@ -130,7 +130,7 @@ class VectorNet(nn.Module):
                 map_start_polyline_idx = mapping[i]['map_start_polyline_idx']
                 agents = element_states_batch[i][:map_start_polyline_idx]
                 lanes = element_states_batch[i][map_start_polyline_idx:]
-                if 'laneGCN-4' in args.other_params:
+                if 'laneGCN-4' in args.other_params:    # cross-attention, query是lane, key和value是lanns和AGENT的堆叠
                     lanes = lanes + self.laneGCN_A2L(lanes.unsqueeze(0), torch.cat([lanes, agents[0:1]]).unsqueeze(0)).squeeze(0)   # cross-atten, 仅仅lanes被修改
                 else:
                     lanes = lanes + self.laneGCN_A2L(lanes.unsqueeze(0), agents.unsqueeze(0)).squeeze(0)
@@ -138,7 +138,7 @@ class VectorNet(nn.Module):
                     agents = agents + self.laneGCN_L2A(agents.unsqueeze(0), lanes.unsqueeze(0)).squeeze(0)
                 element_states_batch[i] = torch.cat([agents, lanes])
 
-        return element_states_batch, lane_states_batch
+        return element_states_batch, lane_states_batch  # batch_size length list, 第一个是[ele, 128], 其中的lane经过lanegcn, 第二个是[lane, 128], 其中的lane没有经过lanegcn
 
     # @profile
     def forward(self, mapping: List[Dict], device):
@@ -146,7 +146,7 @@ class VectorNet(nn.Module):
         global starttime
         starttime = time.time()
 
-        matrix = utils.get_from_mapping(mapping, 'matrix')
+        matrix = utils.get_from_mapping(mapping, 'matrix')  # list of matrix
         # TODO(cyrushx): Can you explain the structure of polyline spans?
         # vectors of i_th element is matrix[polyline_spans[i]]
         polyline_spans = utils.get_from_mapping(mapping, 'polyline_spans')
@@ -156,7 +156,7 @@ class VectorNet(nn.Module):
         # polyline_spans[i] = [slice(polyline_span[0], polyline_span[1]) for polyline_span in polyline_spans[i]]
 
         if args.argoverse:
-            utils.batch_init(mapping)
+            utils.batch_init(mapping)   # 之前将坐标系旋转, 这里计算将坐标系转回去所需要的original angle和原点
 
         element_states_batch, lane_states_batch = self.forward_encode_sub_graph(mapping, matrix, polyline_spans, device, batch_size)    # ele_batch[0] = [ele, 128]
 

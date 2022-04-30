@@ -346,6 +346,11 @@ def preprocess(args, id2info, mapping):
 def argoverse_get_instance(lines, file_name, args):
     """
     Extract polylines from one example file content.
+
+    Return:
+        mapping Dict with stacked feature [xs, ys, xe, ye, time, 'AV', 'AGENT', 'OTHERS', cluster, index in cluster], \
+            [xs, ys, xe, ye, 1, index in cluster, cluster, traffic control, turn direction, intersection, ..., xss, yss].reverse( ) 128 columns, \
+                spans (begin row, end row) etc. 
     """
 
     global max_vector_num
@@ -354,7 +359,7 @@ def argoverse_get_instance(lines, file_name, args):
     mapping = {}    # 当前scene的全局信息, e.g. normalized pos
     mapping['file_name'] = file_name
 
-    for i, line in enumerate(lines):
+    for i, line in enumerate(lines):    # 读取csv文件每一行
 
         line = line.strip().split(',')
         if i == 0:
@@ -422,7 +427,7 @@ def argoverse_get_instance(lines, file_name, args):
     mapping['angle'] = angle
     for id in id2info:
         info = id2info[id]
-        for line in info:
+        for line in info:   # 旋转坐标为AGENT, 使得AGENT的方向垂直向上
             line[X], line[Y] = rotate(line[X] - mapping['cent_x'], line[Y] - mapping['cent_y'], angle)
         if 'scale' in mapping:
             scale = mapping['scale']
@@ -451,13 +456,13 @@ class Dataset(torch.utils.data.Dataset):
                 for each_dir in data_dir:
                     root, dirs, cur_files = os.walk(each_dir).__next__()
                     files.extend([os.path.join(each_dir, file) for file in cur_files if
-                                  file.endswith("csv") and not file.startswith('.')])
+                                  file.endswith("csv") and not file.startswith('.')])   # files ['sample/data/3828.csv', ..]
                 print(files[:5], files[-5:])
 
                 pbar = tqdm(total=len(files))
 
                 queue = multiprocessing.Queue(args.core_num)
-                queue_res = multiprocessing.Queue()     # TODO: queue和queue_res的区别是什么? queue和场景数量相关, queue_res和进程数相关
+                queue_res = multiprocessing.Queue()     # queue用于存放待处理的csv文件(以及指示退出的None), queue_res用于存储处理+压缩完的数据
 
                 def calc_ex_list(queue, queue_res, args):
                     res = []
@@ -465,15 +470,15 @@ class Dataset(torch.utils.data.Dataset):
                     while True:
                         file = queue.get()
                         if file is None:
-                            break
+                            break   # 如果从queue中取出None, 则退出该进程
                         if file.endswith("csv"):
                             with open(file, "r", encoding='utf-8') as fin:
-                                lines = fin.readlines()[1:]
-                            instance = argoverse_get_instance(lines, file, args)    # instance is mapping dict
+                                lines = fin.readlines()[1:] # 跳过csv第一行的column名称
+                            instance = argoverse_get_instance(lines, file, args)    # instance is mapping dict (agnets and lanes)
                             if instance is not None:
                                 data_compress = zlib.compress(pickle.dumps(instance))
                                 res.append(data_compress)
-                                queue_res.put(data_compress)
+                                queue_res.put(data_compress)    # 放入正常的压缩数据
                             else:
                                 queue_res.put(None)
 
@@ -504,7 +509,7 @@ class Dataset(torch.utils.data.Dataset):
                 pass
 
                 for i in range(args.core_num):
-                    queue.put(None)
+                    queue.put(None)     # 确保每个进程都能收到None而break
                 for each in processes:
                     each.join()
 

@@ -212,7 +212,7 @@ class Decoder(nn.Module):
         stage_one_topk_ids = None
         if 'stage_one' in args.other_params:
             stage_one_topk_ids = self.goals_2D_per_example_stage_one(i, mapping, lane_states_batch, inputs, inputs_lengths,
-                                                                     hidden_states, device, loss)
+                                                                     hidden_states, device, loss)   # 并计算loss, 感觉这一步计算的是靠近的top lane, 而不是goal 2D
 
         goals_2D_tensor = torch.tensor(goals_2D, device=device, dtype=torch.float)
         get_scores_inputs = (inputs, hidden_states, inputs_lengths, i, mapping, device)
@@ -221,13 +221,13 @@ class Decoder(nn.Module):
         index = torch.argmax(scores).item()
         highest_goal = goals_2D[index]
 
-        if 'lazy_points' in args.other_params:
+        if 'lazy_points' in args.other_params:  # 已经找到score最高的goal, 这里再通过在得分高的点周围插入neighbor point再重复计算score
             scores, highest_goal, goals_2D = \
                 self.goals_2D_per_example_lazy_points(i, goals_2D, mapping, labels, device, scores,
                                                       get_scores_inputs, stage_one_topk_ids, gt_points)
             index = None
 
-        if args.do_train:
+        if args.do_train:   # 这一个loss中包含了goal 2d的loss和完整的轨迹的L1 loss
             self.goals_2D_per_example_calc_loss(i, goals_2D, mapping, inputs, inputs_lengths,
                                                 hidden_states, device, loss, DE, gt_points, scores, highest_goal, labels_is_valid)
 
